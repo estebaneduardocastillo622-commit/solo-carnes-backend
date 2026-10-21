@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: solo-carnes-api
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22
+      - key: SUPABASE_URL
+        value: https://zdvdatqkaopzeimimqnm.supabase.co
+      - key: SUPABASE_PUBLISHABLE_KEY
+        value: sb_publishable_ANwkH7QGRjgArV16mOXtww_dsfmyvRC
