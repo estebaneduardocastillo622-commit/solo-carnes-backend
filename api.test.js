@@ -125,3 +125,21 @@ test('controla paginacion, fechas imposibles y JSON invalido', async t => {
   assert.equal((await request('/api/kardex?fecha_desde=2026-10-20&fecha_hasta=2026-10-01')).status, 400);
   assert.equal((await request('/api/ventas', { method: 'POST', raw: '{mal json' })).status, 400);
 });
+test('un plato se crea por unidad y con stock minimo cero', async t => {
+  const { request } = await setup(t);
+  const plato = { codigo: 'P-01', nombre: 'Parrillada individual', tipo: 'PLATO', unidad: 'UNIDAD', precio_venta: 60, stock_minimo: 0 };
+  assert.equal((await request('/api/productos', { method: 'POST', body: { ...plato, unidad: 'KG' } })).status, 400);
+  assert.equal((await request('/api/productos', { method: 'POST', body: { ...plato, stock_minimo: 5 } })).status, 400);
+  const result = await request('/api/productos', { method: 'POST', body: plato });
+  assert.equal(result.status, 201);
+  assert.equal(result.data.datos.tipo, 'PLATO');
+  assert.equal(result.data.datos.unidad, 'UNIDAD');
+});
+test('consumo manual de cocina envia cantidad y motivo a su RPC', async t => {
+  const { request, calls } = await setup(t);
+  const consumo = { producto_id: 2, cantidad: 0.6, motivo: 'Carne utilizada en parrilladas' };
+  assert.equal((await request('/api/consumos', { method: 'POST', token: 'vendedor-test', body: consumo })).status, 403);
+  assert.equal((await request('/api/consumos', { method: 'POST', body: { ...consumo, motivo: ' ' } })).status, 400);
+  assert.equal((await request('/api/consumos', { method: 'POST', body: consumo })).status, 201);
+  assert.deepEqual(calls, [{ name: 'registrar_consumo_insumo', args: { p_producto_id: 2, p_cantidad: 0.6, p_motivo: 'Carne utilizada en parrilladas' } }]);
+});

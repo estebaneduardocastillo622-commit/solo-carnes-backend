@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: solo-carnes-api
+    name: solo-carnes-api-wilfredo
     runtime: node
     plan: free
     buildCommand: npm ci

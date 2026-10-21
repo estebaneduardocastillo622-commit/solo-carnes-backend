@@ -1,6 +1,16 @@
 # Restaurante Solo Carnes: backend en Render + base de datos en Supabase
 
-API REST de compras, ventas e inventario del restaurante Solo Carnes, con Node.js y Express. Permite gestionar productos, compras a proveedores, ventas y movimientos del inventario. La documentacion Swagger se abre en `/docs/` y permite probar las operaciones desde el navegador. No se necesita el frontend ni una cuenta de ChatGPT.
+API REST de compras, ventas e inventario del restaurante Solo Carnes, con Node.js y Express. Gestiona insumos de cocina, platos a la parrilla y productos para reventa. La documentacion Swagger se abre en `/docs/` y permite probar las operaciones desde el navegador. No se necesita el frontend ni una cuenta de ChatGPT.
+
+## Procedimiento del restaurante (cinco tablas)
+
+- **INSUMO:** carne, papa, aceite, condimentos. Se compra y se controla en KG, LITRO o UNIDAD. No se vende directamente.
+- **PLATO:** parrillada individual, churrasco con guarnicion. Se vende por UNIDAD entera. No se compra ni se lleva stock de platos preparados; stock y stock minimo quedan en cero.
+- **PRODUCTO:** bebidas u otros articulos para reventa. Se compran, se almacenan y su venta descuenta stock automaticamente.
+
+El encargado registra manualmente el consumo de cocina en `POST /api/consumos`: producto insumo, cantidad utilizada y motivo. Esta operacion descuenta el insumo y deja una SALIDA en Kardex. **Vender un plato no descuenta ingredientes automaticamente.** Este MVP no incluye recetas ni costeo automatico de platos, para conservar las cinco tablas.
+
+Ejemplo: comprar 10 KG de carne; vender dos parrilladas a Bs 60 cada una (total Bs 120); registrar por separado 0.6 KG de carne utilizados en cocina. Quedan 9.4 KG del insumo. Una bebida de reventa se vende y descuenta por su unidad, sin requerir un consumo manual.
 
 ## Ejecutar
 
@@ -31,7 +41,7 @@ Render proporciona `PORT`. El servidor escucha en `0.0.0.0`. `render.yaml` permi
 1. Abrir el enlace de Render terminado en `/docs/`.
 2. Ejecutar `POST /api/auth/login` con una cuenta del sistema.
 3. Copiar `access_token` en **Authorize** (sin escribir Bearer).
-4. Consultar productos, crear un producto de prueba, comprar, vender y revisar Kardex.
+4. Crear un INSUMO en KG y un PLATO en UNIDAD. Comprar el insumo, vender platos y registrar por separado el consumo en cocina. Consultar Kardex.
 5. Abrir **Schemas** para revisar los campos de las cinco tablas.
 
 Las operaciones modifican la base de datos real. Conviene usar registros identificados como prueba. El token no persiste al recargar Swagger; si vence, se obtiene otro iniciando sesion nuevamente.
@@ -51,6 +61,7 @@ Las operaciones modifican la base de datos real. Conviene usar registros identif
 | GET / POST | `/api/ventas` | Administrador / vendedor |
 | GET | `/api/kardex` | Administrador / almacen |
 | POST | `/api/ajustes` | Administrador / almacen |
+| POST | `/api/consumos` | Administrador / almacen |
 | GET / PATCH | `/api/usuarios` / `/api/usuarios/:id` | Administrador |
 
 Las listas son paginadas (`pagina`, `limite`, maximo 100). Compras, ventas y Kardex admiten `producto_id`, `fecha_desde` y `fecha_hasta` en fecha de Bolivia. Kardex admite `tipo`. Productos permite `buscar` por nombre.
@@ -60,14 +71,16 @@ Las listas son paginadas (`pagina`, `limite`, maximo 100). Compras, ventas y Kar
 Este servidor usa el proyecto Supabase Solo Carnes existente y no crea tablas adicionales:
 
 1. `usuarios`: UUID vinculado a Auth, nombre completo, rol y estado.
-2. `productos`: ID, codigo, nombre, costo promedio, precio de venta, stock y stock minimo.
-3. `compras`: ID, producto, usuario, proveedor, fecha, cantidad, costo unitario y total.
-4. `ventas`: ID, producto, usuario, cliente, fecha, cantidad, precio unitario y total.
-5. `movimientos_inventario`: ID, producto, usuario, compra/venta asociada, fecha, tipo, cantidad, stock anterior/nuevo y observacion.
+2. `productos`: ID, codigo, nombre, tipo (INSUMO/PLATO/PRODUCTO), unidad (KG/UNIDAD/LITRO), costo promedio, precio de venta, stock y stock minimo.
+3. `compras`: ID, producto, usuario, proveedor, fecha, cantidad, unidad, costo unitario y total.
+4. `ventas`: ID, producto, usuario, cliente, fecha, cantidad, unidad, precio unitario y total.
+5. `movimientos_inventario`: ID, producto, usuario, compra/venta asociada, fecha, tipo, cantidad, unidad, stock anterior/nuevo y observacion.
 
-Las funciones existentes `registrar_compra`, `registrar_venta`, `ajustar_inventario` y `gestionar_usuario` ejecutan las escrituras con validacion de rol. Compras, ventas y ajustes bloquean el producto y actualizan todos los registros de manera atomica. Las tablas tienen RLS. El servidor pasa el JWT del usuario a Supabase, de modo que los permisos siguen aplicandose en PostgreSQL. El vendedor solo ve sus propias ventas.
+Las funciones `registrar_compra`, `registrar_venta`, `registrar_consumo_insumo`, `ajustar_inventario` y `gestionar_usuario` ejecutan las escrituras con validacion de rol. Las operaciones bloquean el producto y actualizan sus registros de manera atomica. Las tablas tienen RLS. El servidor pasa el JWT del usuario a Supabase, de modo que los permisos siguen aplicandose en PostgreSQL. El vendedor solo ve sus propias ventas.
 
-No se permite escribir stock directamente, cambiar el costo promedio con un PATCH ni editar/eliminar operaciones confirmadas. El responsable siempre se obtiene de la sesion. Cantidades en kg (3 decimales), precios en Bs y costo de compra hasta 4 decimales.
+No se permite escribir stock directamente, cambiar el costo promedio con un PATCH ni editar/eliminar operaciones confirmadas. El responsable siempre se obtiene de la sesion. KG y LITRO admiten 3 decimales; UNIDAD solo numeros enteros. Precios en Bs por la unidad declarada y costo de compra hasta 4 decimales. El tipo y la unidad no se pueden cambiar si existe historial, para no reinterpretar cantidades anteriores.
+
+`restaurante.sql` contiene la migracion aplicada sobre las cinco tablas existentes. Conserva los registros previos como insumos en KG y sus unidades historicas; no es un esquema completo para una base vacia. La interfaz antigua del primer prototipo no corresponde a este nuevo flujo; la entrega actual es la API de restaurante documentada en Swagger.
 
 ## Verificacion
 

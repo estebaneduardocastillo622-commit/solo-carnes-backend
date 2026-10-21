@@ -1,6 +1,6 @@
 {
   "name": "solo-carnes-backend",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "description": "API de compras, ventas e inventario del restaurante Solo Carnes con Supabase y Swagger",

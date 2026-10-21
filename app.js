@@ -13,7 +13,8 @@ const decimal = (max, places, positive = false) => z.number().finite().min(posit
 const kg = decimal(999999999.999, 3, true);
 const stock = decimal(999999999.999, 3);
 const price = decimal(9999999999.99, 2);
-const product = z.object({ codigo: text(30), nombre: text(150), precio_venta: price, stock_minimo: stock }).strict();
+const product = z.object({ codigo: text(30), nombre: text(150), tipo: z.enum(['INSUMO', 'PLATO', 'PRODUCTO']), unidad: z.enum(['KG', 'UNIDAD', 'LITRO']), precio_venta: price, stock_minimo: stock }).strict();
+const restaurantProduct = product.refine(p => p.tipo !== 'PLATO' || (p.unidad === 'UNIDAD' && p.stock_minimo === 0), 'Los platos usan UNIDAD y stock minimo 0; sus ingredientes se consumen manualmente.');
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(s => {
   const d = new Date(`${s}T00:00:00Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
@@ -64,7 +65,7 @@ export function createApp({ url, key, production = false, clientFactory } = {}) 
   app.use(express.json({ limit: '16kb' }));
   app.use('/api', rateLimit({ windowMs: 60000, limit: 180, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: 'Demasiadas solicitudes. Espera un minuto.' } }));
   app.get('/', (req, res) => res.redirect('/docs/'));
-  app.get('/health', (req, res) => res.json({ estado: 'ok', servicio: 'Solo Carnes API', version: '1.0.0' }));
+  app.get('/health', (req, res) => res.json({ estado: 'ok', servicio: 'Restaurante Solo Carnes API Wilfredo', version: '1.1.0' }));
   app.get('/openapi.json', (req, res) => res.json(openapi));
   app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapi, {
     customSiteTitle: 'Solo Carnes | API y base de datos',
@@ -120,7 +121,7 @@ export function createApp({ url, key, production = false, clientFactory } = {}) 
     res.json({ datos: data });
   });
   app.post('/api/productos', permit('administrador', 'almacen'), async (req, res) => {
-    const body = validate(product, req.body);
+    const body = validate(restaurantProduct, req.body);
     const { data, error } = await req.sb.from('productos').insert(body).select('*').single();
     if (error) throw databaseError(error);
     res.status(201).json({ datos: data });
@@ -145,7 +146,7 @@ export function createApp({ url, key, production = false, clientFactory } = {}) 
     const b = validate(z.object({ producto_id: id, cantidad: kg, cliente_nombre: text(150).default('Consumidor final') }).strict(), req.body);
     const { data, error } = await req.sb.rpc('registrar_venta', { p_producto_id: b.producto_id, p_cantidad: b.cantidad, p_cliente_nombre: b.cliente_nombre });
     if (error) throw databaseError(error);
-    res.status(201).json({ venta_id: data, mensaje: 'Venta, descuento de stock y Kardex registrados.' });
+    res.status(201).json({ venta_id: data, mensaje: 'Venta registrada. En platos, registra el consumo de ingredientes por separado en /api/consumos; en productos para reventa el stock se descuenta automaticamente.' });
   });
   app.get('/api/kardex', permit('administrador', 'almacen'), list('movimientos_inventario', 'movimiento_id', true));
   app.post('/api/ajustes', permit('administrador', 'almacen'), async (req, res) => {
@@ -153,6 +154,12 @@ export function createApp({ url, key, production = false, clientFactory } = {}) 
     const { data, error } = await req.sb.rpc('ajustar_inventario', { p_producto_id: b.producto_id, p_stock_nuevo: b.stock_nuevo, p_motivo: b.motivo });
     if (error) throw databaseError(error);
     res.status(201).json({ movimiento_id: data, mensaje: 'Ajuste e historial registrados.' });
+  });
+  app.post('/api/consumos', permit('administrador', 'almacen'), async (req, res) => {
+    const b = validate(z.object({ producto_id: id, cantidad: kg, motivo: text(500) }).strict(), req.body);
+    const { data, error } = await req.sb.rpc('registrar_consumo_insumo', { p_producto_id: b.producto_id, p_cantidad: b.cantidad, p_motivo: b.motivo });
+    if (error) throw databaseError(error);
+    res.status(201).json({ movimiento_id: data, mensaje: 'Consumo de cocina y salida de inventario registrados.' });
   });
   app.get('/api/usuarios', permit('administrador'), list('usuarios', 'usuario_id'));
   app.patch('/api/usuarios/:id', permit('administrador'), async (req, res) => {
