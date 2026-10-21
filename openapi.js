@@ -21,8 +21,8 @@ const post = (tag, title, input, output, description) => ({ tags: [tag], summary
 export const openapi = {
   openapi: '3.0.3',
   info: {
-    title: 'Solo Carnes · Backend y base de datos', version: '1.0.0',
-    description: `API de compras, ventas e inventario de una tienda de carnes. Servidor Node.js + Express y base de datos PostgreSQL en Supabase.
+    title: 'Restaurante Solo Carnes · Backend y base de datos', version: '1.0.0',
+    description: `API de compras, ventas e inventario del restaurante Solo Carnes. Permite gestionar sus productos, registrar compras a proveedores, registrar ventas y consultar los movimientos del inventario. Servidor Node.js + Express y base de datos PostgreSQL en Supabase.
 
 ## Como probar el proyecto
 1. Abre **Autenticacion → POST /api/auth/login → Try it out** e ingresa una cuenta del sistema. Pulsa **Execute**.
@@ -50,7 +50,7 @@ Abre **Schemas** al final para revisar los campos de **Usuario**, **Producto**, 
   tags: [
     { name: 'Estado', description: 'Comprobacion publica del servidor.' },
     { name: 'Autenticacion', description: 'Inicia sesion con una cuenta de Solo Carnes.' },
-    { name: 'Productos', description: 'Catalogo, precios y existencias.' },
+    { name: 'Productos', description: 'Catalogo de productos, precios y existencias del restaurante.' },
     { name: 'Compras', description: 'Administrador y almacen. Entradas de mercancia.' },
     { name: 'Ventas', description: 'Administrador y vendedor. Salidas con control de stock.' },
     { name: 'Kardex', description: 'Administrador y almacen. Historial y ajustes.' },

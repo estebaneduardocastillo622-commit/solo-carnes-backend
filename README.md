@@ -1,6 +1,6 @@
-# Solo Carnes: backend en Render + base de datos en Supabase
+# Restaurante Solo Carnes: backend en Render + base de datos en Supabase
 
-API REST con Node.js y Express. La documentacion Swagger se abre en `/docs/` y permite probar las operaciones desde el navegador. No se necesita el frontend ni una cuenta de ChatGPT.
+API REST de compras, ventas e inventario del restaurante Solo Carnes, con Node.js y Express. Permite gestionar productos, compras a proveedores, ventas y movimientos del inventario. La documentacion Swagger se abre en `/docs/` y permite probar las operaciones desde el navegador. No se necesita el frontend ni una cuenta de ChatGPT.
 
 ## Ejecutar
 

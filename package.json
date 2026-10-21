@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "API de compras, ventas e inventario de Solo Carnes con Supabase y Swagger",
+  "description": "API de compras, ventas e inventario del restaurante Solo Carnes con Supabase y Swagger",
   "engines": { "node": ">=22 <25" },
   "scripts": { "start": "node --env-file-if-exists=.env server.js", "test": "node --test", "check": "node --check app.js && node --check openapi.js && node --check server.js" },
   "dependencies": { "@supabase/supabase-js": "^2.0.0", "express": "^5.1.0", "express-rate-limit": "^8.0.0", "helmet": "^8.0.0", "swagger-ui-express": "^5.0.1", "zod": "^4.0.0" }
