@@ -24,7 +24,7 @@ END $$;
 DROP TRIGGER IF EXISTS validar_receta_detalle ON public.recetas_detalle;
 CREATE TRIGGER validar_receta_detalle BEFORE INSERT OR UPDATE ON public.recetas_detalle FOR EACH ROW EXECUTE FUNCTION public.validar_receta_detalle();
 
-ALTER TABLE public.recetas_detalle ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.movimientos_inventario DROP CONSTRAINT IF EXISTS movimientos_inventario_venta_id_key;`r`nALTER TABLE public.recetas_detalle ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS recetas_lectura ON public.recetas_detalle;
 DROP POLICY IF EXISTS recetas_gestion ON public.recetas_detalle;
 CREATE POLICY recetas_lectura ON public.recetas_detalle FOR SELECT TO authenticated USING (coalesce(public.mi_rol(),'') IN ('administrador','almacen','vendedor'));
