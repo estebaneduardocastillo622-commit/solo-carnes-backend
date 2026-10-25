@@ -23,6 +23,9 @@ BEGIN
      OR EXISTS (SELECT 1 FROM public.movimientos_inventario WHERE usuario_id = p_usuario_id) THEN
     RAISE EXCEPTION 'No se puede eliminar un usuario con operaciones registradas';
   END IF;
+  -- La clave foránea de perfiles no tiene borrado en cascada: se elimina
+  -- primero el perfil y después la cuenta de autenticación.
+  DELETE FROM public.usuarios WHERE usuario_id = p_usuario_id;
   DELETE FROM auth.users WHERE id = p_usuario_id;
 END;
 $$;
