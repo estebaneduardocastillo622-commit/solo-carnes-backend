@@ -138,6 +138,12 @@ export function createApp({ url, key, production = false, clientFactory } = {}) 
     if (error) throw databaseError(error);
     res.status(201).json({ datos: data });
   });
+  app.delete('/api/productos/:id', permit('administrador', 'almacen'), async (req, res) => {
+    const productId = validate(id, req.params.id);
+    const { error } = await req.sb.from('productos').delete().eq('producto_id', productId);
+    if (error) throw databaseError(error);
+    res.status(204).end();
+  });
   app.patch('/api/productos/:id', permit('administrador', 'almacen'), async (req, res) => {
     const productId = validate(id, req.params.id);
     const body = validate(product.partial().refine(v => Object.keys(v).length > 0, 'Indica al menos un campo'), req.body);
