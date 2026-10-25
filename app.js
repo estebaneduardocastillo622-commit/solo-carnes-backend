@@ -112,9 +112,9 @@ export function createApp({ url, key, production = false, clientFactory } = {}) 
   });
   app.get('/api/auth/me', (req, res) => res.json({ usuario: req.profile }));
 
-  const list = (table, order, filterDates = false) => async (req, res) => {
+  const list = (table, order, filterDates = false, columns = '*') => async (req, res) => {
     const args = validate(listQuery, req.query);
-    let q = req.sb.from(table).select('*', { count: 'exact' }).order(order, { ascending: false });
+    let q = req.sb.from(table).select(columns, { count: 'exact' }).order(order, { ascending: false });
     if (table !== 'usuarios' && args.producto_id) q = q.eq('producto_id', args.producto_id);
     if (table === 'productos' && args.buscar) q = q.ilike('nombre', `%${args.buscar.replace(/[\\%_]/g, '\\$&')}%`);
     if (table === 'movimientos_inventario' && args.tipo) q = q.eq('tipo_movimiento', args.tipo);
@@ -172,14 +172,14 @@ export function createApp({ url, key, production = false, clientFactory } = {}) 
     const { error } = await req.sb.from('recetas_detalle').delete().eq('receta_id', recipeId);
     if (error) throw databaseError(error);
     res.status(204).end();
-  });  app.get('/api/ventas', permit('administrador', 'vendedor'), list('ventas', 'venta_id', true));
+  });  app.get('/api/ventas', permit('administrador', 'vendedor'), list('ventas', 'venta_id', true, '*,producto:productos(nombre)')); 
   app.post('/api/ventas', permit('administrador', 'vendedor'), async (req, res) => {
     const b = validate(z.object({ producto_id: id, cantidad: kg, cliente_nombre: text(150).default('Consumidor final') }).strict(), req.body);
     const { data, error } = await req.sb.rpc('registrar_venta', { p_producto_id: b.producto_id, p_cantidad: b.cantidad, p_cliente_nombre: b.cliente_nombre });
     if (error) throw databaseError(error);
     res.status(201).json({ venta_id: data, mensaje: 'Venta registrada. Los ingredientes de la receta se descontaron automáticamente y quedaron registrados en Kardex.' });
   });
-  app.get('/api/kardex', permit('administrador', 'almacen'), list('movimientos_inventario', 'movimiento_id', true));
+  app.get('/api/kardex', permit('administrador', 'almacen'), list('movimientos_inventario', 'movimiento_id', true, '*,producto:productos(nombre)')); 
   app.post('/api/ajustes', permit('administrador', 'almacen'), async (req, res) => {
     const b = validate(z.object({ producto_id: id, stock_nuevo: stock, motivo: text(500) }).strict(), req.body);
     const { data, error } = await req.sb.rpc('ajustar_inventario', { p_producto_id: b.producto_id, p_stock_nuevo: b.stock_nuevo, p_motivo: b.motivo });
