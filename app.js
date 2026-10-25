@@ -141,7 +141,10 @@ export function createApp({ url, key, production = false, clientFactory } = {}) 
   app.delete('/api/productos/:id', permit('administrador', 'almacen'), async (req, res) => {
     const productId = validate(id, req.params.id);
     const { error } = await req.sb.from('productos').delete().eq('producto_id', productId);
-    if (error) throw databaseError(error);
+    if (error) {
+      if (error.code === '23503') throw new ApiError(409, 'No se puede eliminar este producto porque tiene compras, ventas, recetas o movimientos asociados.');
+      throw databaseError(error);
+    }
     res.status(204).end();
   });
   app.patch('/api/productos/:id', permit('administrador', 'almacen'), async (req, res) => {
