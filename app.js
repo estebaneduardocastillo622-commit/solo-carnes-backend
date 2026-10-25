@@ -65,7 +65,7 @@ export function createApp({ url, key, production = false, clientFactory } = {}) 
       res.set('Access-Control-Allow-Origin', origin);
       res.set('Vary', 'Origin');
       res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
-      res.set('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
+      res.set('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
     }
     if (req.method === 'OPTIONS') return res.sendStatus(204);
     next();
