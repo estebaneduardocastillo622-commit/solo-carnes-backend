@@ -8,9 +8,9 @@ API REST de compras, ventas e inventario del restaurante Solo Carnes, con Node.j
 - **PLATO:** parrillada individual, churrasco con guarnicion. Se vende por UNIDAD entera. No se compra ni se lleva stock de platos preparados; stock y stock minimo quedan en cero.
 - **PRODUCTO:** bebidas u otros articulos para reventa. Se compran, se almacenan y su venta descuenta stock automaticamente.
 
-El encargado registra manualmente el consumo de cocina en `POST /api/consumos`: producto insumo, cantidad utilizada y motivo. Esta operacion descuenta el insumo y deja una SALIDA en Kardex. **Vender un plato no descuenta ingredientes automaticamente.** Este MVP no incluye recetas ni costeo automatico de platos, para conservar las cinco tablas.
+Cada plato se configura con sus ingredientes en el módulo **Recetas**. Al venderlo, el sistema valida que exista stock suficiente, descuenta automáticamente cada insumo y deja una SALIDA por ingrediente en el Kardex.
 
-Ejemplo: comprar 10 KG de carne; vender dos parrilladas a Bs 60 cada una (total Bs 120); registrar por separado 0.6 KG de carne utilizados en cocina. Quedan 9.4 KG del insumo. Una bebida de reventa se vende y descuenta por su unidad, sin requerir un consumo manual.
+Ejemplo: comprar 10 KG de carne; definir que una parrillada usa 0.3 KG de carne; vender dos parrilladas a Bs 60 cada una (total Bs 120). Se descuentan automáticamente 0.6 KG y quedan 9.4 KG del insumo.
 
 ## Ejecutar
 

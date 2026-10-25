@@ -14,7 +14,8 @@ const kg = decimal(999999999.999, 3, true);
 const stock = decimal(999999999.999, 3);
 const price = decimal(9999999999.99, 2);
 const product = z.object({ codigo: text(30), nombre: text(150), tipo: z.enum(['INSUMO', 'PLATO', 'PRODUCTO']), unidad: z.enum(['KG', 'UNIDAD', 'LITRO']), precio_venta: price, stock_minimo: stock }).strict();
-const restaurantProduct = product.refine(p => p.tipo !== 'PLATO' || (p.unidad === 'UNIDAD' && p.stock_minimo === 0), 'Los platos usan UNIDAD y stock minimo 0; sus ingredientes se consumen manualmente.');
+const restaurantProduct = product.refine(p => p.tipo !== 'PLATO' || (p.unidad === 'UNIDAD' && p.stock_minimo === 0), 'Los platos usan UNIDAD y stock minimo 0; sus ingredientes se descuentan automáticamente según su receta.');
+const recipe = z.object({ plato_id: id, insumo_id: id, cantidad: kg }).strict().refine(v => v.plato_id !== v.insumo_id, 'El plato y el insumo deben ser distintos.');
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(s => {
   const d = new Date(`${s}T00:00:00Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
@@ -58,6 +59,17 @@ export function createApp({ url, key, production = false, clientFactory } = {}) 
   const app = express();
   if (production) app.set('trust proxy', 1);
   app.disable('x-powered-by');
+  app.use((req, res, next) => {
+    const origin = req.get('Origin');
+    if (origin && (/^https?:\/\/localhost(?::\d+)?$/.test(origin) || /^https?:\/\/127\.0\.0\.1(?::\d+)?$/.test(origin) || /^https:\/\/[^/]+\.vercel\.app$/.test(origin))) {
+      res.set('Access-Control-Allow-Origin', origin);
+      res.set('Vary', 'Origin');
+      res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+      res.set('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
+    }
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+    next();
+  });
   app.use(helmet({
     contentSecurityPolicy: { directives: { 'upgrade-insecure-requests': production ? [] : null } },
     strictTransportSecurity: production ? undefined : false,
@@ -141,12 +153,31 @@ export function createApp({ url, key, production = false, clientFactory } = {}) 
     if (error) throw databaseError(error);
     res.status(201).json({ compra_id: data, mensaje: 'Compra, stock, costo promedio y Kardex registrados.' });
   });
-  app.get('/api/ventas', permit('administrador', 'vendedor'), list('ventas', 'venta_id', true));
+  app.get('/api/recetas', permit('administrador', 'almacen', 'vendedor'), async (req, res) => {
+    const platoId = req.query.plato_id ? validate(id, req.query.plato_id) : undefined;
+    let query = req.sb.from('recetas_detalle').select('receta_id,plato_id,insumo_id,cantidad,plato:productos!recetas_detalle_plato_id_fkey(producto_id,nombre),insumo:productos!recetas_detalle_insumo_id_fkey(producto_id,nombre,unidad)').order('receta_id');
+    if (platoId) query = query.eq('plato_id', platoId);
+    const { data, error } = await query;
+    if (error) throw databaseError(error);
+    res.json({ datos: data });
+  });
+  app.post('/api/recetas', permit('administrador', 'almacen'), async (req, res) => {
+    const body = validate(recipe, req.body);
+    const { data, error } = await req.sb.from('recetas_detalle').insert(body).select('*').single();
+    if (error) throw databaseError(error);
+    res.status(201).json({ datos: data, mensaje: 'Ingrediente agregado a la receta.' });
+  });
+  app.delete('/api/recetas/:id', permit('administrador', 'almacen'), async (req, res) => {
+    const recipeId = validate(id, req.params.id);
+    const { error } = await req.sb.from('recetas_detalle').delete().eq('receta_id', recipeId);
+    if (error) throw databaseError(error);
+    res.status(204).end();
+  });  app.get('/api/ventas', permit('administrador', 'vendedor'), list('ventas', 'venta_id', true));
   app.post('/api/ventas', permit('administrador', 'vendedor'), async (req, res) => {
     const b = validate(z.object({ producto_id: id, cantidad: kg, cliente_nombre: text(150).default('Consumidor final') }).strict(), req.body);
     const { data, error } = await req.sb.rpc('registrar_venta', { p_producto_id: b.producto_id, p_cantidad: b.cantidad, p_cliente_nombre: b.cliente_nombre });
     if (error) throw databaseError(error);
-    res.status(201).json({ venta_id: data, mensaje: 'Venta registrada. En platos, registra el consumo de ingredientes por separado en /api/consumos; en productos para reventa el stock se descuenta automaticamente.' });
+    res.status(201).json({ venta_id: data, mensaje: 'Venta registrada. Los ingredientes de la receta se descontaron automáticamente y quedaron registrados en Kardex.' });
   });
   app.get('/api/kardex', permit('administrador', 'almacen'), list('movimientos_inventario', 'movimiento_id', true));
   app.post('/api/ajustes', permit('administrador', 'almacen'), async (req, res) => {
@@ -180,3 +211,4 @@ export function createApp({ url, key, production = false, clientFactory } = {}) 
   });
   return app;
 }
+

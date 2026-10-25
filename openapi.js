@@ -23,7 +23,7 @@ const post = (tag, title, input, output, description) => ({ tags: [tag], summary
 export const openapi = {
   openapi: '3.0.3',
   info: {
-    title: 'Restaurante Solo Carnes · API Wilfredo', version: '1.1.0',
+    title: 'Restaurante Solo Carnes · API Wilfredo', version: '1.2.0',
     description: `API de compras, ventas e inventario del restaurante Solo Carnes. Permite gestionar sus productos, registrar compras a proveedores, registrar ventas y consultar los movimientos del inventario. Servidor Node.js + Express y base de datos PostgreSQL en Supabase.
 
 ## Como probar el proyecto
@@ -32,7 +32,7 @@ export const openapi = {
 3. Pulsa **Authorize** y pega solamente el token. No agregues la palabra Bearer: Swagger la agrega automaticamente.
 4. Crea un **INSUMO**, por ejemplo carne de res en KG, y un **PLATO**, por ejemplo parrillada individual en UNIDAD. Consulta **GET /api/productos** para obtener sus IDs reales.
 5. Registra una compra del insumo con **POST /api/compras**. Vende platos con **POST /api/ventas**: cantidad 2 significa dos platos.
-6. Registra por separado lo utilizado en cocina con **POST /api/consumos**, por ejemplo 0.6 KG de carne. Consulta **GET /api/kardex** para revisar las salidas.
+6. Registra los ingredientes del plato en **Recetas → POST /api/recetas**; por ejemplo 0.3 KG de carne para una parrillada. Al vender el plato, sus insumos se descuentan y se registran automáticamente en Kardex.
 
 Las operaciones modifican la base de datos real. Usa productos de prueba identificados para la evaluacion. No se requiere una cuenta de ChatGPT para abrir esta documentacion.
 
@@ -42,7 +42,7 @@ Las operaciones modifican la base de datos real. Usa productos de prueba identif
 - Las compras ingresan insumos o productos para reventa; no se compran platos preparados. Los insumos no se venden directamente.
 - Cada compra o venta corresponde a un producto.
 - Las compras actualizan el costo promedio ponderado del insumo o producto. Las ventas toman el precio actual del plato o producto.
-- **Consumo manual:** vender un plato no descuenta ingredientes. El encargado registra el consumo de cocina con cantidad y motivo en **POST /api/consumos**. No hay recetas ni calculo automatico de costo por plato en este MVP de cinco tablas.
+- **Recetas automáticas:** cada plato debe tener al menos un insumo configurado en **/api/recetas** antes de venderse. La venta valida existencias, descuenta las cantidades de cada ingrediente y crea sus salidas en Kardex dentro de la misma transacción.
 - Al vender un PRODUCTO para reventa (por ejemplo, una gaseosa), se valida y descuenta su stock automaticamente.
 - Las funciones de PostgreSQL validan permisos y bloquean el producto durante la actualizacion de stock.
 - Operaciones confirmadas y Kardex no se editan ni eliminan. Los ajustes requieren motivo.
@@ -60,6 +60,7 @@ Abre **Schemas** al final para revisar los campos de **Usuario**, **Producto**, 
     { name: 'Productos', description: 'Catalogo de productos, precios y existencias del restaurante.' },
     { name: 'Compras', description: 'Administrador y almacen. Entradas de mercancia.' },
     { name: 'Ventas', description: 'Administrador y vendedor. Platos por unidad y productos para reventa.' },
+    { name: 'Recetas', description: 'Administrador y almacen. Ingredientes requeridos por cada plato.' },
     { name: 'Kardex', description: 'Administrador y almacen. Consumos manuales de cocina, historial y ajustes.' },
     { name: 'Usuarios', description: 'Solo administrador. Cuentas nuevas desde Authentication de Supabase.' },
   ],
@@ -79,9 +80,14 @@ Abre **Schemas** al final para revisar los campos de **Usuario**, **Producto**, 
       get: getList('Compras', 'Compra', 'Consultar compras', filters),
       post: post('Compras', 'Comprar insumos o productos para reventa', 'CompraEntrada', obj({ compra_id: integer, mensaje: { type: 'string' } }), 'No admite PLATO. Aumenta stock en la unidad declarada, actualiza costo promedio y genera una entrada en Kardex. Todo se confirma en una transaccion.'),
     },
+    '/api/recetas': {
+      get: getList('Recetas', 'RecetaDetalle', 'Listar ingredientes de recetas', [query('plato_id', 'Filtrar por plato', { type: 'integer', minimum: 1 })]),
+      post: post('Recetas', 'Agregar un insumo a un plato', 'RecetaEntrada', obj({ datos: ref('RecetaDetalle'), mensaje: { type: 'string' } }), 'Solo administrador y almacen. El producto principal debe ser PLATO y el ingrediente debe ser INSUMO.'),
+    },
+    '/api/recetas/{id}': { delete: { tags: ['Recetas'], summary: 'Quitar ingrediente de una receta', parameters: [pathId], responses: { 204: response('Ingrediente eliminado'), ...errors } } },
     '/api/ventas': {
       get: getList('Ventas', 'Venta', 'Consultar ventas segun tu rol', filters),
-      post: post('Ventas', 'Vender platos preparados o productos para reventa', 'VentaEntrada', obj({ venta_id: integer, mensaje: { type: 'string' } }), 'PLATO: cantidad entera, precio por plato y sin descuento de ingredientes; el consumo se registra manualmente en /api/consumos. PRODUCTO: descuenta stock y genera salida. No admite INSUMO. No se recibe precio ni usuario desde el cliente.'),
+      post: post('Ventas', 'Vender platos preparados o productos para reventa', 'VentaEntrada', obj({ venta_id: integer, mensaje: { type: 'string' } }), 'PLATO: cantidad entera. La receta valida y descuenta automáticamente cada insumo, dejando una salida por ingrediente en Kardex. PRODUCTO: descuenta su propio stock. No admite INSUMO.'),
     },
     '/api/kardex': { get: getList('Kardex', 'MovimientoInventario', 'Consultar entradas, salidas y ajustes', [...filters, query('tipo', 'Tipo de movimiento', { type: 'string', enum: ['ENTRADA', 'SALIDA', 'AJUSTE'] })]) },
     '/api/ajustes': { post: post('Kardex', 'Ajustar existencias segun conteo fisico', 'AjusteEntrada', obj({ movimiento_id: integer, mensaje: { type: 'string' } }), 'Solo INSUMO o PRODUCTO. Indica el stock final real, no una cantidad a sumar. El motivo es obligatorio. Registra la diferencia con signo en el Kardex.') },
@@ -101,6 +107,8 @@ Abre **Schemas** al final para revisar los campos de **Usuario**, **Producto**, 
       ProductoEdicion: obj({ codigo: { type: 'string', maxLength: 30 }, nombre: { type: 'string', maxLength: 150 }, tipo: productType, unidad: unit, precio_venta: money, stock_minimo: stock }),
       Compra: obj({ compra_id: integer, producto_id: integer, usuario_id: uuid, proveedor_nombre: { type: 'string' }, fecha: stamp, cantidad: kg, unidad: unit, costo_unitario: { type: 'number' }, total: { type: 'number', description: 'Cantidad x costo, redondeado a 2 decimales por PostgreSQL.' } }),
       CompraEntrada: obj({ producto_id: integer, proveedor_nombre: { type: 'string', example: 'Proveedor de prueba', maxLength: 150 }, cantidad: kg, costo_unitario: { type: 'number', minimum: 0, multipleOf: 0.0001, example: 30 } }, ['producto_id', 'proveedor_nombre', 'cantidad', 'costo_unitario']),
+      RecetaDetalle: obj({ receta_id: integer, plato_id: integer, insumo_id: integer, cantidad: kg }),
+      RecetaEntrada: obj({ plato_id: integer, insumo_id: integer, cantidad: kg }, ['plato_id', 'insumo_id', 'cantidad']),
       Venta: obj({ venta_id: integer, producto_id: integer, usuario_id: uuid, cliente_nombre: { type: 'string' }, fecha: stamp, cantidad: kg, unidad: unit, precio_unitario: money, total: { type: 'number' } }),
       VentaEntrada: obj({ producto_id: integer, cliente_nombre: { type: 'string', default: 'Consumidor final', maxLength: 150 }, cantidad: { ...kg, example: 2, description: 'Para PLATO: numero entero de platos. Para PRODUCTO: cantidad en su unidad.' } }, ['producto_id', 'cantidad']),
       MovimientoInventario: obj({ movimiento_id: integer, producto_id: integer, usuario_id: uuid, compra_id: { ...integer, nullable: true }, venta_id: { ...integer, nullable: true }, fecha: stamp, tipo_movimiento: { type: 'string', enum: ['ENTRADA', 'SALIDA', 'AJUSTE'] }, cantidad: { type: 'number', description: 'Positiva para entradas y salidas; diferencia con signo para ajustes.' }, unidad: unit, stock_anterior: stock, stock_nuevo: stock, observacion: { type: 'string', nullable: true } }),
