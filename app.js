@@ -16,6 +16,12 @@ const price = decimal(9999999999.99, 2);
 const product = z.object({ codigo: text(30), nombre: text(150), tipo: z.enum(['INSUMO', 'PLATO', 'PRODUCTO']), unidad: z.enum(['KG', 'UNIDAD', 'LITRO']), precio_venta: price, stock_minimo: stock }).strict();
 const restaurantProduct = product.refine(p => p.tipo !== 'PLATO' || (p.unidad === 'UNIDAD' && p.stock_minimo === 0), 'Los platos usan UNIDAD y stock minimo 0; sus ingredientes se descuentan automáticamente según su receta.');
 const recipe = z.object({ plato_id: id, insumo_id: id, cantidad: kg }).strict().refine(v => v.plato_id !== v.insumo_id, 'El plato y el insumo deben ser distintos.');
+const newUser = z.object({
+  nombre_completo: text(120),
+  email: z.email().max(254),
+  password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres.').max(128),
+  rol: z.enum(['administrador', 'vendedor', 'almacen']),
+}).strict();
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(s => {
   const d = new Date(`${s}T00:00:00Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
@@ -202,6 +208,31 @@ export function createApp({ url, key, production = false, clientFactory } = {}) 
     res.status(201).json({ movimiento_id: data, mensaje: 'Consumo de cocina y salida de inventario registrados.' });
   });
   app.get('/api/usuarios', permit('administrador'), list('usuarios', 'usuario_id'));
+  app.post('/api/usuarios', authLimit, permit('administrador'), async (req, res) => {
+    const b = validate(newUser, req.body);
+    const { data: result, error } = await client().auth.signUp({
+      email: b.email.toLowerCase(),
+      password: b.password,
+      options: { data: { nombre_completo: b.nombre_completo } },
+    });
+    if (error) {
+      if (/already|registered|exists/i.test(error.message || '')) throw new ApiError(409, 'Ya existe una cuenta con ese correo.');
+      throw new ApiError(400, 'No se pudo crear la cuenta. Revisa el correo y la contraseña.');
+    }
+    if (!result?.user || result.user.identities?.length === 0) throw new ApiError(409, 'Ya existe una cuenta con ese correo.');
+    const { error: profileError } = await req.sb.rpc('gestionar_usuario', {
+      p_usuario_id: result.user.id,
+      p_nombre: b.nombre_completo,
+      p_rol: b.rol,
+      p_estado: true,
+    });
+    if (profileError) throw databaseError(profileError);
+    res.status(201).json({
+      usuario: { usuario_id: result.user.id, nombre_completo: b.nombre_completo, rol: b.rol, estado: true },
+      requiere_confirmacion: !result.session,
+      mensaje: result.session ? 'Usuario creado y habilitado.' : 'Usuario creado. Debe confirmar el correo antes de iniciar sesión.',
+    });
+  });
   app.patch('/api/usuarios/:id', permit('administrador'), async (req, res) => {
     const userId = validate(z.uuid(), req.params.id);
     const b = validate(z.object({ nombre_completo: text(120), rol: z.enum(['administrador', 'vendedor', 'almacen']), estado: z.boolean() }).strict(), req.body);

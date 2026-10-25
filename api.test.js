@@ -6,6 +6,7 @@ import { createApp } from './app.js';
 const adminId = '11111111-1111-4111-8111-111111111111';
 function fakeSupabase(options = {}) {
   const calls = [];
+  const signUps = [];
   const factory = token => {
     const rol = token === 'vendedor-test' ? 'vendedor' : 'administrador';
     const profile = { usuario_id: adminId, nombre_completo: 'Prueba', rol, estado: token !== 'inactivo-test' };
@@ -13,6 +14,10 @@ function fakeSupabase(options = {}) {
       auth: {
         getUser: async () => token === 'invalido-test' ? { data: null, error: {} } : { data: { user: { id: adminId } }, error: null },
         signInWithPassword: async () => ({ data: { user: { id: adminId }, session: { access_token: 'admin-test', expires_in: 3600 } }, error: null }),
+        signUp: async payload => {
+          signUps.push(payload);
+          return options.signUpResult || { data: { user: { id: '22222222-2222-4222-8222-222222222222', identities: [{}] }, session: null }, error: null };
+        },
       },
       from: table => {
         let payload;
@@ -28,7 +33,7 @@ function fakeSupabase(options = {}) {
       rpc: async (name, args) => { calls.push({ name, args }); return options.rpcError ? { error: options.rpcError } : { data: 7, error: null }; },
     };
   };
-  return { factory, calls };
+  return { factory, calls, signUps };
 }
 async function setup(t, options) {
   const fake = fakeSupabase(options);
@@ -79,6 +84,16 @@ test('el vendedor no compra ni administra perfiles', async t => {
   assert.equal((await request('/api/compras', { token: 'vendedor-test', method: 'POST', body: { producto_id: 1, cantidad: 2, costo_unitario: 20, proveedor_nombre: 'Prueba' } })).status, 403);
   assert.equal((await request('/api/usuarios', { token: 'vendedor-test' })).status, 403);
   assert.equal(calls.length, 0);
+});
+test('el administrador crea una cuenta con perfil y rol desde el formulario', async t => {
+  const { request, calls, signUps } = await setup(t);
+  const account = { nombre_completo: 'Ana Parrillera', email: 'ana@example.com', password: 'clave-segura', rol: 'almacen' };
+  const r = await request('/api/usuarios', { method: 'POST', body: account });
+  assert.equal(r.status, 201);
+  assert.equal(r.data.usuario.rol, 'almacen');
+  assert.equal(r.data.requiere_confirmacion, true);
+  assert.deepEqual(signUps, [{ email: 'ana@example.com', password: 'clave-segura', options: { data: { nombre_completo: 'Ana Parrillera' } } }]);
+  assert.deepEqual(calls, [{ name: 'gestionar_usuario', args: { p_usuario_id: '22222222-2222-4222-8222-222222222222', p_nombre: 'Ana Parrillera', p_rol: 'almacen', p_estado: true } }]);
 });
 test('no acepta escribir stock ni cambiar costo desde productos', async t => {
   const { request } = await setup(t);
