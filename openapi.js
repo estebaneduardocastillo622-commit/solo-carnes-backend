@@ -96,7 +96,10 @@ Abre **Schemas** al final para revisar los campos de **Usuario**, **Producto**, 
       get: getList('Usuarios', 'Usuario', 'Listar perfiles del personal'),
       post: post('Usuarios', 'Crear una cuenta del personal', 'UsuarioNuevo', obj({ usuario: ref('Usuario'), requiere_confirmacion: { type: 'boolean' }, mensaje: { type: 'string' } }), 'Solo administrador. Crea la cuenta en Supabase Auth y su perfil de personal. Si la confirmación de correo está activa, el usuario deberá confirmarlo antes de iniciar sesión.'),
     },
-    '/api/usuarios/{id}': { patch: { tags: ['Usuarios'], summary: 'Cambiar nombre, rol y estado de una cuenta', description: 'Solo administrador. No permite quitar tu propio acceso de administrador. No cambia correos ni contrasenas.', parameters: [{ ...pathId, schema: uuid }], requestBody: body('UsuarioEdicion'), responses: { 200: response('Perfil actualizado', obj({ mensaje: { type: 'string' } })), ...errors } } },
+    '/api/usuarios/{id}': {
+      delete: { tags: ['Usuarios'], summary: 'Eliminar una cuenta de prueba sin historial', description: 'Solo administrador. Elimina el acceso y su perfil. No permite eliminar la propia cuenta ni usuarios con operaciones registradas.', parameters: [{ ...pathId, schema: uuid }], responses: { 204: response('Cuenta eliminada'), ...errors } },
+      patch: { tags: ['Usuarios'], summary: 'Cambiar nombre, rol y estado de una cuenta', description: 'Solo administrador. No permite quitar tu propio acceso de administrador. No cambia correos ni contrasenas.', parameters: [{ ...pathId, schema: uuid }], requestBody: body('UsuarioEdicion'), responses: { 200: response('Perfil actualizado', obj({ mensaje: { type: 'string' } })), ...errors } },
+    },
   },
   components: {
     securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT', description: 'Pega el access_token obtenido en POST /api/auth/login.' } },

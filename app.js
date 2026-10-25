@@ -233,6 +233,13 @@ export function createApp({ url, key, production = false, clientFactory } = {}) 
       mensaje: result.session ? 'Usuario creado y habilitado.' : 'Usuario creado. Debe confirmar el correo antes de iniciar sesión.',
     });
   });
+  app.delete('/api/usuarios/:id', permit('administrador'), async (req, res) => {
+    const usuarioId = validate(z.uuid(), req.params.id);
+    if (usuarioId === req.profile.usuario_id) throw new ApiError(400, 'No puedes eliminar tu propia cuenta.');
+    const { error } = await req.sb.rpc('eliminar_usuario', { p_usuario_id: usuarioId });
+    if (error) throw databaseError(error);
+    res.status(204).end();
+  });
   app.patch('/api/usuarios/:id', permit('administrador'), async (req, res) => {
     const userId = validate(z.uuid(), req.params.id);
     const b = validate(z.object({ nombre_completo: text(120), rol: z.enum(['administrador', 'vendedor', 'almacen']), estado: z.boolean() }).strict(), req.body);

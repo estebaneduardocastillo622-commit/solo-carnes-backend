@@ -46,7 +46,8 @@ async function setup(t, options) {
       method, headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body || raw ? { 'Content-Type': 'application/json' } : {}) },
       body: raw ?? (body ? JSON.stringify(body) : undefined),
     });
-    return { status: res.status, headers: res.headers, data: await res.json() };
+    const rawBody = await res.text();
+    return { status: res.status, headers: res.headers, data: rawBody ? JSON.parse(rawBody) : null };
   };
   return { ...fake, request, url };
 }
@@ -94,6 +95,15 @@ test('el administrador crea una cuenta con perfil y rol desde el formulario', as
   assert.equal(r.data.requiere_confirmacion, true);
   assert.deepEqual(signUps, [{ email: 'ana@example.com', password: 'clave-segura', options: { data: { nombre_completo: 'Ana Parrillera' } } }]);
   assert.deepEqual(calls, [{ name: 'gestionar_usuario', args: { p_usuario_id: '22222222-2222-4222-8222-222222222222', p_nombre: 'Ana Parrillera', p_rol: 'almacen', p_estado: true } }]);
+});
+test('solo el administrador elimina una cuenta ajena y nunca la propia', async t => {
+  const { request, calls } = await setup(t);
+  const otherId = '22222222-2222-4222-8222-222222222222';
+  assert.equal((await request('/api/usuarios/' + adminId, { method: 'DELETE' })).status, 400);
+  assert.equal((await request('/api/usuarios/' + otherId, { method: 'DELETE', token: 'vendedor-test' })).status, 403);
+  const response = await request('/api/usuarios/' + otherId, { method: 'DELETE' });
+  assert.equal(response.status, 204);
+  assert.deepEqual(calls, [{ name: 'eliminar_usuario', args: { p_usuario_id: otherId } }]);
 });
 test('no acepta escribir stock ni cambiar costo desde productos', async t => {
   const { request } = await setup(t);
